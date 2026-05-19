@@ -247,10 +247,10 @@ dbt test          # verifica calidad de datos
 
 ## Documentación
 
-Los documentos explicativos del proyecto (Fases 1-6) están disponibles aparte:
+En docs está la siguiente documentación:
 
-- `proyecto_airbnb_fases123_v3.docx` — Exploración, Snowflake y Modelado
-- `proyecto_airbnb_doc2_fases45.docx` — dbt y Análisis SQL
-- `proyecto_airbnb_fase6.docx` — PowerBI
+- ERD Silver
+- ERD Gold
+- Linaje
+- Presentación
 
-El linaje completo de datos está disponible en `dbt docs generate`.
