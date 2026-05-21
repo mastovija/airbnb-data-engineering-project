@@ -254,3 +254,9 @@ En docs está la siguiente documentación:
 - Linaje
 - Presentación
 
+## Power BI
+
+![Cuanta vivienda es capturada?](docs/BI_vivienda_capturada.pdf)
+![Quien captura la vivienda?](docs/BI_quien_captura.pdf)
+![Cual es la rentabilidad?](docs/BI_rentabilidad.pdf)
+
