@@ -254,9 +254,13 @@ En docs está la siguiente documentación:
 - Linaje
 - Presentación
 
-## Power BI
+## Dashboard PowerBI
 
-![Cuanta vivienda es capturada?](docs/BI_vivienda_capturada.pdf)
-![Quien captura la vivienda?](docs/BI_quien_captura.pdf)
-![Cual es la rentabilidad?](docs/BI_rentabilidad.pdf)
+### Página 1 — ¿Cuánta vivienda está siendo capturada?
+![Vivienda capturada](docs/BI_vivienda_capturada.png)
 
+### Página 2 — ¿Quién captura la vivienda?
+![Quién captura](docs/BI_quien_captura.png)
+
+### Página 3 — ¿Cuál es la rentabilidad?
+![Rentabilidad](docs/BI_rentabilidad.png)
