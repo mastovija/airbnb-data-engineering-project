@@ -1,0 +1,5 @@
+snowflake-connector-python==3.12.4
+snowflake-connector-python[pandas]
+python-dotenv==1.0.1
+streamlit==1.40.0
+pandas==2.2.3
