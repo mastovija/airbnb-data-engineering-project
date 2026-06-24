@@ -1,96 +1,109 @@
 """
 INGESTA COMPLETA — 9 ciudades españolas de Inside Airbnb → Snowflake Bronze
 ============================================================================
-Requisito: pip install snowflake-connector-python
+Requisitos: pip install -r requirements.txt
 
-Hace las 3 cosas en orden:
-  1. Descarga los CSV.gz de Inside Airbnb
-  2. Los sube al stage interno de Snowflake (PUT)
-  3. Ejecuta los COPY INTO para cargar en RAW_LISTINGS y RAW_REVIEWS
+Pasos:
+  1. Descarga CSV.gz de Inside Airbnb para cada ciudad
+  2. Listings: carga por nombre de columna (pandas) — robusto ante cambios de esquema
+  3. Reviews:  carga posicional con PUT + COPY INTO (esquema estable de 6 columnas)
+  4. Valida recuento de filas por ciudad
 
-Sevilla y Málaga ya están en Snowflake — este script carga las 7 nuevas.
-Al final valida el recuento de filas por ciudad.
-
-USO:
-  python ingest_spain_cities.py
-
-CREDENCIALES:
-  Edita el archivo .env en la raíz del proyecto (ya creado con plantilla):
+CREDENCIALES — archivo .env en la raíz del proyecto:
     SNOWFLAKE_ACCOUNT=abc12345.eu-west-1
     SNOWFLAKE_USER=tu_usuario
     SNOWFLAKE_PASSWORD=tu_contraseña
-
-  El script lo carga automáticamente. El .env está en .gitignore — seguro.
 """
 
 import os
 import sys
 import urllib.request
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Carga automática de .env si existe en el directorio del proyecto
+import gzip
+import pandas as pd
+from dotenv import load_dotenv
+from snowflake.connector.pandas_tools import write_pandas
+
 load_dotenv(Path(__file__).parent / ".env")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG SNOWFLAKE
 # ─────────────────────────────────────────────────────────────────────────────
-# Tu account identifier lo encuentras en Snowflake → esquina inferior izquierda
-# o ejecutando SELECT CURRENT_ACCOUNT() en una worksheet.
-# Formato típico: "abc12345" o "abc12345.eu-west-1"
 
-SNOWFLAKE_ACCOUNT  = os.getenv("SNOWFLAKE_ACCOUNT",  "TU_ACCOUNT_AQUI")
-SNOWFLAKE_USER     = os.getenv("SNOWFLAKE_USER",     "TU_USUARIO_AQUI")
-SNOWFLAKE_PASSWORD = os.getenv("SNOWFLAKE_PASSWORD", "TU_PASSWORD_AQUI")
+SNOWFLAKE_ACCOUNT   = os.getenv("SNOWFLAKE_ACCOUNT",  "TU_ACCOUNT_AQUI")
+SNOWFLAKE_USER      = os.getenv("SNOWFLAKE_USER",     "TU_USUARIO_AQUI")
+SNOWFLAKE_PASSWORD  = os.getenv("SNOWFLAKE_PASSWORD", "TU_PASSWORD_AQUI")
 SNOWFLAKE_WAREHOUSE = "AIRBNB_WH"
 SNOWFLAKE_DATABASE  = "AIRBNB_DEV_BRONZE"
 SNOWFLAKE_SCHEMA    = "BRONZE"
 SNOWFLAKE_STAGE     = "AIRBNB_STAGE"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CIUDADES NUEVAS (Sevilla y Málaga ya están cargadas, se omiten)
-#
-# URLs CONFIRMADAS: barcelona, girona, euskadi, valencia
-# PENDIENTES DE VERIFICAR: madrid, mallorca, menorca
-#   → Ve a https://insideairbnb.com/get-the-data/
-#     Busca cada ciudad y reemplaza la fecha en la URL.
+# COLUMNAS ESPERADAS EN RAW_LISTINGS (las 79 originales de Inside Airbnb)
+# Se seleccionan por nombre — el orden en el CSV no importa.
+# Columnas extra en CSVs nuevos se ignoran automáticamente.
+# ─────────────────────────────────────────────────────────────────────────────
+
+RAW_LISTINGS_COLUMNS = [
+    "id", "listing_url", "scrape_id", "last_scraped", "source", "name",
+    "description", "neighborhood_overview", "picture_url", "host_id",
+    "host_url", "host_name", "host_since", "host_location", "host_about",
+    "host_response_time", "host_response_rate", "host_acceptance_rate",
+    "host_is_superhost", "host_thumbnail_url", "host_picture_url",
+    "host_neighbourhood", "host_listings_count", "host_total_listings_count",
+    "host_verifications", "host_has_profile_pic", "host_identity_verified",
+    "neighbourhood", "neighbourhood_cleansed", "neighbourhood_group_cleansed",
+    "latitude", "longitude", "property_type", "room_type", "accommodates",
+    "bathrooms", "bathrooms_text", "bedrooms", "beds", "amenities", "price",
+    "minimum_nights", "maximum_nights", "minimum_minimum_nights",
+    "maximum_minimum_nights", "minimum_maximum_nights", "maximum_maximum_nights",
+    "minimum_nights_avg_ntm", "maximum_nights_avg_ntm", "calendar_updated",
+    "has_availability", "availability_30", "availability_60", "availability_90",
+    "availability_365", "calendar_last_scraped", "number_of_reviews",
+    "number_of_reviews_ltm", "number_of_reviews_l30d", "availability_eoy",
+    "number_of_reviews_ly", "estimated_occupancy_l365d", "estimated_revenue_l365d",
+    "first_review", "last_review", "review_scores_rating", "review_scores_accuracy",
+    "review_scores_cleanliness", "review_scores_checkin",
+    "review_scores_communication", "review_scores_location", "review_scores_value",
+    "license", "instant_bookable", "calculated_host_listings_count",
+    "calculated_host_listings_count_entire_homes",
+    "calculated_host_listings_count_private_rooms",
+    "calculated_host_listings_count_shared_rooms", "reviews_per_month",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CIUDADES
 # ─────────────────────────────────────────────────────────────────────────────
 
 CITIES = {
     "barcelona": {
         "date": "2026-03-21",
         "path": "spain/catalonia/barcelona",
-        "verified": True,
     },
     "girona": {
         "date": "2025-12-31",
         "path": "spain/catalonia/girona",
-        "verified": True,
     },
     "euskadi": {
         "date": "2025-09-29",
         "path": "spain/pv/euskadi",
-        "verified": True,
     },
     "valencia": {
         "date": "2025-09-23",
         "path": "spain/vc/valencia",
-        "verified": True,
     },
     "madrid": {
-        "date": "2025-09-14",       # ← VERIFICAR en insideairbnb.com/get-the-data
+        "date": "2025-09-14",
         "path": "spain/comunidad-de-madrid/madrid",
-        "verified": True,
     },
     "mallorca": {
-        "date": "2025-09-21",       # ← VERIFICAR en insideairbnb.com/get-the-data
+        "date": "2025-09-21",
         "path": "spain/islas-baleares/mallorca",
-        "verified": True,
     },
     "menorca": {
-        "date": "2025-09-30",       # ← VERIFICAR en insideairbnb.com/get-the-data
+        "date": "2025-09-30",
         "path": "spain/islas-baleares/menorca",
-        "verified": True,
     },
 }
 
@@ -104,23 +117,6 @@ HEADERS = {
     )
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# SQL — columnas 1..79 del CSV + literal de ciudad
-# ─────────────────────────────────────────────────────────────────────────────
-
-COLS_79 = ",".join(f"${i}" for i in range(1, 80))
-
-COPY_LISTINGS_SQL = """
-COPY INTO {db}.{schema}.RAW_LISTINGS
-FROM (
-    SELECT {cols}, '{city}'
-    FROM @{db}.{schema}.{stage}/{filename}
-)
-FILE_FORMAT = (TYPE='CSV' FIELD_OPTIONALLY_ENCLOSED_BY='"'
-               SKIP_HEADER=1 NULL_IF=('','NULL','null','NA')
-               EMPTY_FIELD_AS_NULL=TRUE);
-"""
-
 COPY_REVIEWS_SQL = """
 COPY INTO {db}.{schema}.RAW_REVIEWS
 FROM (
@@ -132,7 +128,6 @@ FILE_FORMAT = (TYPE='CSV' FIELD_OPTIONALLY_ENCLOSED_BY='"'
                EMPTY_FIELD_AS_NULL=TRUE);
 """
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # FUNCIONES
 # ─────────────────────────────────────────────────────────────────────────────
@@ -142,7 +137,6 @@ def download_file(url: str, dest: Path) -> bool:
         size_mb = dest.stat().st_size / 1024 / 1024
         print(f"  ⏭  Ya existe ({size_mb:.1f} MB): {dest.name}")
         return True
-
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
         req = urllib.request.Request(url, headers=HEADERS)
@@ -174,10 +168,8 @@ def snowflake_connect():
         "SNOWFLAKE_USER":     SNOWFLAKE_USER,
         "SNOWFLAKE_PASSWORD": SNOWFLAKE_PASSWORD,
     }.items() if v.startswith("TU_")]
-
     if missing:
         print(f"\n✗  Faltan credenciales: {', '.join(missing)}")
-        print("   Edita las variables al inicio del script o usa variables de entorno.")
         sys.exit(1)
 
     print(f"\n🔌 Conectando a Snowflake ({SNOWFLAKE_ACCOUNT})...")
@@ -193,46 +185,94 @@ def snowflake_connect():
     return conn
 
 
-def put_file(cursor, local_path: Path):
-    """Sube un archivo al stage interno de Snowflake."""
-    put_sql = (
-        f"PUT 'file://{local_path.resolve()}' "
-        f"@{SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{SNOWFLAKE_STAGE} "
-        f"AUTO_COMPRESS=FALSE OVERWRITE=FALSE"
+def load_listings_pandas(conn, city: str, path: Path):
+    """
+    Carga listings por nombre de columna usando pandas + write_pandas.
+    Robusto ante cualquier número de columnas o cambios de orden en el CSV.
+    """
+    print(f"  📖 Leyendo {path.name}...")
+    df = pd.read_csv(path, compression="gzip", dtype=str, low_memory=False)
+    print(f"     CSV: {len(df):,} filas × {len(df.columns)} columnas")
+
+    # Seleccionar solo las columnas conocidas que existen en el CSV
+    cols_presentes = [c for c in RAW_LISTINGS_COLUMNS if c in df.columns]
+    cols_ausentes  = [c for c in RAW_LISTINGS_COLUMNS if c not in df.columns]
+    df = df[cols_presentes].copy()
+
+    if cols_ausentes:
+        print(f"  ⚠️  Columnas ausentes en el CSV (se cargarán como NULL): {cols_ausentes}")
+        for col in cols_ausentes:
+            df[col] = None
+
+    # Reordenar según el esquema de la tabla + añadir city
+    df = df[RAW_LISTINGS_COLUMNS]
+    df["city"] = city
+
+    # Snowflake espera nombres de columna en MAYÚSCULAS
+    df.columns = [c.upper() for c in df.columns]
+
+    # Borrar filas previas de esta ciudad (idempotente)
+    cursor = conn.cursor()
+    cursor.execute(
+        f"DELETE FROM {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.RAW_LISTINGS "
+        f"WHERE CITY = '{city}'"
     )
-    print(f"  ↑  PUT {local_path.name}...")
-    result = cursor.execute(put_sql).fetchone()
-    status = result[6] if result else "?"
-    print(f"     → {status}")
-    return "UPLOADED" in str(status).upper() or "SKIPPED" in str(status).upper()
+    deleted = cursor.rowcount
+    if deleted > 0:
+        print(f"  🗑  Eliminadas {deleted:,} filas previas de {city}")
 
-
-def copy_into(cursor, city: str, file_type: str, filename: str):
-    """Ejecuta el COPY INTO correspondiente."""
-    if file_type == "listings":
-        sql = COPY_LISTINGS_SQL.format(
-            db=SNOWFLAKE_DATABASE, schema=SNOWFLAKE_SCHEMA,
-            stage=SNOWFLAKE_STAGE, cols=COLS_79,
-            city=city, filename=filename,
-        )
+    # Cargar con write_pandas
+    print(f"  ↑  Cargando {len(df):,} filas en RAW_LISTINGS...")
+    success, nchunks, nrows, _ = write_pandas(
+        conn, df,
+        table_name="RAW_LISTINGS",
+        database=SNOWFLAKE_DATABASE,
+        schema=SNOWFLAKE_SCHEMA,
+        auto_create_table=False,
+        overwrite=False,
+    )
+    if success:
+        print(f"  ✓  {nrows:,} filas cargadas ({nchunks} chunks)")
     else:
-        sql = COPY_REVIEWS_SQL.format(
-            db=SNOWFLAKE_DATABASE, schema=SNOWFLAKE_SCHEMA,
-            stage=SNOWFLAKE_STAGE,
-            city=city, filename=filename,
-        )
+        print(f"  ✗  Error en write_pandas para {city}")
+    return success
+
+
+def load_reviews_copy(cursor, city: str, path: Path):
+    """Carga reviews con PUT + COPY INTO (esquema estable de 6 columnas)."""
+    put_sql = (
+        f"PUT 'file://{path.resolve()}' "
+        f"@{SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.{SNOWFLAKE_STAGE} "
+        f"AUTO_COMPRESS=FALSE OVERWRITE=TRUE"
+    )
+    print(f"  ↑  PUT {path.name}...")
+    result = cursor.execute(put_sql).fetchone()
+    print(f"     → {result[6] if result else '?'}")
+
+    sql = COPY_REVIEWS_SQL.format(
+        db=SNOWFLAKE_DATABASE, schema=SNOWFLAKE_SCHEMA,
+        stage=SNOWFLAKE_STAGE, city=city, filename=path.name,
+    )
+
+    # Borrar previos de esta ciudad antes de recargar
+    cursor.execute(
+        f"DELETE FROM {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.RAW_REVIEWS "
+        f"WHERE CITY = '{city}'"
+    )
+    deleted = cursor.rowcount
+    if deleted > 0:
+        print(f"  🗑  Eliminadas {deleted:,} reviews previas de {city}")
+
     result = cursor.execute(sql).fetchone()
     try:
         rows = int(result[0]) if result else 0
+        print(f"  ✓  COPY reviews  → {rows:,} filas cargadas")
     except (ValueError, TypeError):
-        # Snowflake devuelve un string cuando el archivo ya fue cargado antes
-        rows = 0
-    msg = f"{rows:,} filas" if rows > 0 else "ya cargado (skipped)"
-    print(f"  ✓  COPY {file_type:8} → {msg}")
-    return rows
+        print(f"  ✓  COPY reviews  → {result[0] if result else 'ok'}")
 
 
-def validate(cursor):
+def validate(conn):
+    cursor = conn.cursor()
     print("\n── VALIDACIÓN FINAL ─────────────────────────────────")
     for table, label in [("RAW_LISTINGS", "listings"), ("RAW_REVIEWS", "reviews")]:
         print(f"\n{label}:")
@@ -244,73 +284,60 @@ def validate(cursor):
         for city, n in rows:
             print(f"  {city:<12}  {n:>10,}")
 
+        # Verificar room_type en listings
+    print("\nroom_type NULL por ciudad (debe ser 0 en todas):")
+    rows = conn.cursor().execute(
+        f"SELECT city, COUNT(*) as nulls "
+        f"FROM {SNOWFLAKE_DATABASE}.{SNOWFLAKE_SCHEMA}.RAW_LISTINGS "
+        f"WHERE room_type IS NULL GROUP BY city ORDER BY nulls DESC"
+    ).fetchall()
+    if rows:
+        for city, n in rows:
+            print(f"  ⚠️  {city:<12}  {n:,} NULLs")
+    else:
+        print("  ✓  Sin NULLs en room_type")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
-    # Aviso ciudades sin verificar
-    unverified = [c for c, d in CITIES.items() if not d["verified"]]
-    if unverified:
-        print(f"\n⚠️  Ciudades con fecha por verificar: {', '.join(unverified)}")
-        print("   Comprueba las URLs en https://insideairbnb.com/get-the-data/")
-        resp = input("   ¿Continuar igualmente? (s/n): ").strip().lower()
-        if resp != "s":
-            print("Edita las fechas en el script y vuelve a ejecutar.")
-            sys.exit(0)
-
     # ── 1. Descargas ──────────────────────────────────────────
     print("\n══ PASO 1: DESCARGA ═══════════════════════════════════")
-    download_results = {}
     for city, cfg in CITIES.items():
         base = f"{BASE_URL}/{cfg['path']}/{cfg['date']}/data"
         print(f"\n── {city.upper()}")
-        ok_l = download_file(f"{base}/listings.csv.gz",
-                             OUTPUT_DIR / city / f"{city}_listings.csv.gz")
-        ok_r = download_file(f"{base}/reviews.csv.gz",
-                             OUTPUT_DIR / city / f"{city}_reviews.csv.gz")
-        download_results[city] = ok_l and ok_r
+        download_file(f"{base}/listings.csv.gz",
+                      OUTPUT_DIR / city / f"{city}_listings.csv.gz")
+        download_file(f"{base}/reviews.csv.gz",
+                      OUTPUT_DIR / city / f"{city}_reviews.csv.gz")
 
-    failed = [c for c, ok in download_results.items() if not ok]
-    if failed:
-        print(f"\n✗  Descarga fallida para: {', '.join(failed)}")
-        print("   Verifica las URLs y vuelve a ejecutar.")
-        sys.exit(1)
-    print("\n✅ Todas las descargas completadas.")
-
-    # ── 2 & 3. PUT + COPY INTO ────────────────────────────────
-    print("\n══ PASO 2-3: SNOWFLAKE — PUT + COPY INTO ══════════════")
+    # ── 2. Snowflake ──────────────────────────────────────────
+    print("\n══ PASO 2: SNOWFLAKE ═══════════════════════════════════")
     conn = snowflake_connect()
     cursor = conn.cursor()
 
-    try:
-        for city in CITIES:
-            print(f"\n── {city.upper()}")
-            listings_file = OUTPUT_DIR / city / f"{city}_listings.csv.gz"
-            reviews_file  = OUTPUT_DIR / city / f"{city}_reviews.csv.gz"
+    for city in CITIES:
+        print(f"\n── {city.upper()}")
+        listings_file = OUTPUT_DIR / city / f"{city}_listings.csv.gz"
+        reviews_file  = OUTPUT_DIR / city / f"{city}_reviews.csv.gz"
 
-            put_file(cursor, listings_file)
-            put_file(cursor, reviews_file)
-            copy_into(cursor, city, "listings", f"{city}_listings.csv.gz")
-            copy_into(cursor, city, "reviews",  f"{city}_reviews.csv.gz")
+        load_listings_pandas(conn, city, listings_file)
+        load_reviews_copy(cursor, city, reviews_file)
 
-        # ── 4. Validación ─────────────────────────────────────
-        print("\n══ PASO 4: VALIDACIÓN ══════════════════════════════")
-        validate(cursor)
+    # ── 3. Validación ─────────────────────────────────────────
+    print("\n══ PASO 3: VALIDACIÓN ══════════════════════════════════")
+    validate(conn)
 
-        print("\n✅ Ingesta completada.")
-        print("\nSIGUIENTE PASO:")
-        print("  1. Actualiza accepted_values en models/silver/schema.yml (ver dbt_changes_9_cities.md)")
-        print("  2. En dbt Cloud → rama dev:")
-        print("       dbt run --select silver")
-        print("       dbt test --select silver")
-        print("       dbt run --select gold")
-        print("       dbt test")
+    conn.close()
 
-    finally:
-        cursor.close()
-        conn.close()
+    print("\n✅ Ingesta completada.")
+    print("\nSIGUIENTE PASO en dbt Cloud (rama dev):")
+    print("  dbt run --select silver")
+    print("  dbt test --select silver")
+    print("  dbt run --select gold")
+    print("  dbt test")
 
 
 if __name__ == "__main__":
