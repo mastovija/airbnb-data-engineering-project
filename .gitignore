@@ -1,6 +1,21 @@
-# you shouldn't commit these into source control
-# these are the default directory names, adjust/add to fit your needs
+# dbt
 target/
 dbt_packages/
 logs/
 dbt_internal_packages/
+
+# entorno virtual Python
+.venv/
+
+# credenciales — NUNCA a GitHub
+.env
+
+# datos crudos descargados (archivos grandes)
+data/
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store

@@ -15,7 +15,7 @@ models:
       facts:
         fact_listings:
           +materialized: incremental
-          +unique_key: listing_id
+          +unique_key: ['listing_id', 'snapshot_date']
 
 seeds:
   airbnb_andalucia:

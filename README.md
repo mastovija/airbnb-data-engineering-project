@@ -1,14 +1,16 @@
-# Presión del alquiler turístico sobre el mercado residencial en Andalucía
+# Presión del alquiler turístico sobre el mercado residencial en España
 
-**Proyecto Final — Data Engineering Bootcamp**
-
-Análisis de la presión que ejerce Airbnb sobre el mercado de vivienda residencial en **Sevilla y Málaga**, usando datos públicos de Inside Airbnb y un pipeline completo de data engineering.
+Pipeline de data engineering que monitoriza el impacto de Airbnb sobre el mercado
+de vivienda en las **9 ciudades españolas** disponibles en Inside Airbnb, con
+actualización trimestral automática y dashboard público.
 
 ---
 
 ## La pregunta
 
-> *¿Está Airbnb presionando el mercado de vivienda en Sevilla y Málaga? Medido desde tres ángulos: cuánta vivienda está siendo capturada, quién la captura y cuánto dinero genera hacerlo.*
+> *¿Está Airbnb presionando el mercado de vivienda en España?*
+> *Medido desde tres ángulos: cuánta vivienda está siendo capturada,*
+> *quién la captura y cuánto dinero genera hacerlo.*
 
 ---
 
@@ -16,31 +18,50 @@ Análisis de la presión que ejerce Airbnb sobre el mercado de vivienda residenc
 
 | Herramienta | Uso |
 |---|---|
-| **Inside Airbnb** | Fuente de datos — scraping trimestral de Airbnb |
+| **Inside Airbnb** | Fuente de datos — snapshots trimestrales |
+| **Python** | Ingesta automatizada — descarga y carga en Snowflake |
 | **Snowflake** | Data warehouse — Bronze, Silver y Gold |
 | **dbt Cloud** | Transformaciones SQL, tests y documentación |
-| **PowerBI Desktop** | Dashboards y visualizaciones |
+| **Streamlit** | Dashboard público interactivo *(en desarrollo)* |
 | **GitHub** | Control de versiones — ramas dev y main |
+
+---
+
+## Ciudades cubiertas (9)
+
+| Ciudad | Región | Listings aprox. |
+|---|---|---|
+| Madrid | Comunidad de Madrid | 25.000 |
+| Málaga | Andalucía | 19.000 |
+| Girona | Cataluña | 17.000 |
+| Sevilla | Andalucía | 16.500 |
+| Barcelona | Cataluña | 16.000 |
+| Mallorca | Islas Baleares | 15.000 |
+| Valencia | Comunitat Valenciana | 7.800 |
+| Euskadi | País Vasco | 6.300 |
+| Menorca | Islas Baleares | 3.700 |
+
+**Total: ~126.000 listings · ~5.3M reviews**
 
 ---
 
 ## Arquitectura — Medallion Architecture
 
 ```
-Inside Airbnb (CSV)
+Inside Airbnb (CSV.gz)
         │
-        ▼
+        ▼ ingest_spain_cities.py
 ┌─────────────┐
 │   BRONZE    │  Dato crudo · Todo TEXT · Sin transformaciones
-│             │  RAW_LISTINGS (80 col · ~18K filas/trimestre)
-│             │  RAW_REVIEWS  (~1.1M filas)
+│             │  RAW_LISTINGS (80 col · ~126K filas)
+│             │  RAW_REVIEWS  (~5.3M filas)
 └──────┬──────┘
        │ dbt
        ▼
 ┌─────────────┐
 │   SILVER    │  Dato limpio · Views · 6 modelos temáticos
 │             │  Tipos casteados · Columnas calculadas
-│             │  Winsorización P95 · host_profile · is_entire_home
+│             │  Winsorización P95 por ciudad · host_profile
 └──────┬──────┘
        │ dbt
        ▼
@@ -51,37 +72,24 @@ Inside Airbnb (CSV)
 └──────┬──────┘
        │
        ▼
-   PowerBI
+   Streamlit (dashboard público)
 ```
 
 ### Arquitectura de entornos
-
-El mismo código dbt se ejecuta contra distintas databases según el entorno, controlado mediante variables de entorno en dbt Cloud:
 
 | Entorno | Databases Snowflake | Branch GitHub |
 |---|---|---|
 | DEV | AIRBNB_DEV_BRONZE / SILVER / GOLD | dev |
 | PROD | AIRBNB_PROD_BRONZE / SILVER / GOLD | main |
 
-**Flujo:** desarrollar en `dev` → `dbt run` en DEV → validar → PR a `main` → job PROD.
-
 ---
 
-## Datos
-
-- **Fuente:** [Inside Airbnb](https://insideairbnb.com/get-the-data/) — datos públicos, sin registro
-- **Ciudades:** Sevilla y Málaga
-- **Snapshots:** Junio 2025 + Septiembre 2025
-- **Volumen:** ~18.000 listings por trimestre · ~1.1M reviews
-
-> Los archivos CSV.gz no están en este repositorio por su tamaño. Descárgalos desde Inside Airbnb buscando los snapshots de Sevilla y Málaga.
-
----
-
-## Estructura del proyecto dbt
+## Estructura del proyecto
 
 ```
-airbnb_andalucia/
+spain-airbnb-housing-pressure/
+├── ingest_spain_cities.py       ← descarga + carga en Snowflake
+├── requirements.txt
 ├── models/
 │   ├── silver/
 │   │   ├── sources.yml
@@ -109,9 +117,8 @@ airbnb_andalucia/
 │   └── dim_room_type.csv
 ├── snapshots/
 │   └── dim_host_snapshot.sql            ← SCD Tipo 2
-├── macros/
-│   └── generate_schema_name.sql
-└── dbt_project.yml
+└── macros/
+    └── generate_schema_name.sql
 ```
 
 ---
@@ -124,7 +131,7 @@ airbnb_andalucia/
 |---|---|---|
 | `stg_listings__details` | Información del inmueble | `is_entire_home` |
 | `stg_listings__host` | Información del host | `host_profile`, `host_seniority_years` |
-| `stg_listings__location` | Geografía del listing | `neighbourhood_cleansed` (TRIM) |
+| `stg_listings__location` | Geografía del listing | `neighbourhood_cleansed` |
 | `stg_listings__availability` | Precio y disponibilidad | `price_winsorized` (P95), `estimated_revenue_adjusted`, `is_high_availability` |
 | `stg_listings__reviews_scores` | Puntuaciones | `days_since_last_review` |
 | `stg_reviews` | Reseñas individuales | `review_month_start` |
@@ -133,8 +140,7 @@ airbnb_andalucia/
 
 ```
 dim_listing ──┐
-dim_host ─────┤
-              ├──► fact_listings (incremental)
+dim_host ─────┼──► fact_listings (incremental)
 dim_neighbourhood ─┤
 dim_room_type ─┘
 
@@ -147,110 +153,87 @@ fact_listings ──► mart_neighbourhood_pressure
 
 ### Decisiones técnicas destacadas
 
-**Winsorización P95:** el precio viene con outliers graves (listing a 21.911$/noche que realmente costaba 170€). Se aplica winsorización al percentil 95 por ciudad (368$ Sevilla · 395$ Málaga) y se recalcula `estimated_revenue_adjusted = price_winsorized × estimated_occupancy_l365d`.
+**Winsorización P95 por ciudad:** el campo `estimated_revenue_l365d` de Inside Airbnb
+contiene outliers graves causados por precios erróneos. Se aplica winsorización al
+percentil 95 **por ciudad** y se recalcula
+`estimated_revenue_adjusted = price_winsorized × estimated_occupancy_l365d`.
 
-**Carga incremental:** `fact_listings` usa `materialized='incremental'` con `unique_key=['listing_id', 'snapshot_date']`. Solo inserta filas con `snapshot_date` posterior al máximo ya cargado.
+**Carga incremental:** `fact_listings` usa `materialized='incremental'` con
+`unique_key=['listing_id', 'snapshot_date']`. Solo inserta filas nuevas.
 
-**SCD Tipo 2:** `dim_host_snapshot` rastrea cambios en `calculated_host_listings_count` y `host_profile` entre snapshots. Columnas: `dbt_valid_from`, `dbt_valid_to` (NULL = registro actual), `dbt_scd_id`.
+**SCD Tipo 2:** `dim_host_snapshot` rastrea cambios en `calculated_host_listings_count`
+y `host_profile` entre snapshots. `dbt_valid_to IS NULL` identifica el registro actual.
 
-**Degenerate dimensions:** `city`, `host_profile` e `is_entire_home` están desnormalizadas en `fact_listings` para evitar joins frecuentes en PowerBI.
-
-**QUALIFY deduplicación:** los JOINs en `fact_listings` generaban producto cartesiano con múltiples snapshots. Solucionado con `QUALIFY ROW_NUMBER() OVER (PARTITION BY listing_id, snapshot_date) = 1`.
+**Degenerate dimensions:** `city`, `host_profile` e `is_entire_home` desnormalizadas
+en `fact_listings` para evitar joins frecuentes en el dashboard.
 
 ---
 
 ## Clasificación de hosts
 
-| Perfil | Criterio | Sevilla | Málaga |
-|---|---|---|---|
-| Host individual | < 2 viviendas completas | 74,8% | 72,0% |
-| Multipropiedad | 2-4 viviendas completas | 16,9% | 20,2% |
-| Operador profesional | ≥ 5 viviendas completas | 8,3% | 7,8% |
-
----
-
-## Hallazgos principales
-
-| Métrica | Sevilla | Málaga |
-|---|---|---|
-| % viviendas completas | 85% | 88% |
-| Barrio más presionado (>20 listings) | Huerta de Santa Teresa 96,97% | — |
-| Top 10% hosts controla | 52,7% listings | 54,5% listings |
-| Ingresos medios por listing/año | 15.273 $ | 10.405 $ |
-| Ingresos medios por operador profesional | 206.000 $ | 128.000 $ |
-| Mayor crecimiento histórico | 2021→2022 +124% | 2015→2016 +132% |
-
-> Los precios están en USD — Inside Airbnb usa dólares aunque los alojamientos sean en España.
-
----
-
-## Dashboard PowerBI
-
-3 páginas siguiendo el hilo narrativo:
-
-1. **Vivienda Capturada** — % viviendas completas por barrio, evolución histórica de reviews
-2. **Quién Captura** — clasificación de hosts, concentración del mercado
-3. **Rentabilidad** — ingresos por barrio y por operador, comparativa Sevilla vs Málaga
-
-Conexión a `AIRBNB_PROD_GOLD` en Snowflake · Modo Importar · Tabla `Ciudades` como dimensión de filtrado centralizado.
-
----
-
-## Limitaciones documentadas
-
-- Precios en USD — Inside Airbnb no convierte a EUR
-- Málaga tiene baja granularidad geográfica: el 65,8% de listings está bajo el barrio 'Centro'
-- El barrio 'an Roque' en Sevilla es un error del dataset original (debería ser 'San Roque')
-- `estimated_revenue_adjusted` es una estimación calculada, no el ingreso real del propietario
+| Perfil | Criterio |
+|---|---|
+| Host individual | < 2 viviendas completas |
+| Multipropiedad | 2–4 viviendas completas |
+| Operador profesional | ≥ 5 viviendas completas |
 
 ---
 
 ## Cómo reproducir el proyecto
 
-### 1. Configurar Snowflake
+### 1. Instalar dependencias
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. Configurar credenciales
+
+Crea un archivo `.env` en la raíz del proyecto:
+
+```
+SNOWFLAKE_ACCOUNT=tu_account
+SNOWFLAKE_USER=tu_usuario
+SNOWFLAKE_PASSWORD=tu_password
+```
+
+### 3. Descargar datos y cargar en Snowflake
+
+```bash
+python ingest_spain_cities.py
+```
+
+El script descarga los CSV.gz de las 9 ciudades, los sube al stage
+de Snowflake y ejecuta los COPY INTO automáticamente.
+
+### 4. Configurar Snowflake (primera vez)
 
 ```sql
--- Crear warehouse
 CREATE WAREHOUSE AIRBNB_WH WAREHOUSE_SIZE='X-SMALL'
     AUTO_SUSPEND=60 AUTO_RESUME=TRUE INITIALLY_SUSPENDED=TRUE;
 
--- Crear databases (DEV y PROD)
-CREATE DATABASE AIRBNB_DEV_BRONZE;
-CREATE DATABASE AIRBNB_DEV_SILVER;
-CREATE DATABASE AIRBNB_DEV_GOLD;
-CREATE DATABASE AIRBNB_PROD_BRONZE;
-CREATE DATABASE AIRBNB_PROD_SILVER;
-CREATE DATABASE AIRBNB_PROD_GOLD;
+CREATE DATABASE AIRBNB_DEV_BRONZE;   CREATE DATABASE AIRBNB_PROD_BRONZE;
+CREATE DATABASE AIRBNB_DEV_SILVER;   CREATE DATABASE AIRBNB_PROD_SILVER;
+CREATE DATABASE AIRBNB_DEV_GOLD;     CREATE DATABASE AIRBNB_PROD_GOLD;
 ```
 
-### 2. Cargar datos en Bronze
-
-Descargar `listings.csv.gz` y `reviews.csv.gz` para Sevilla y Málaga desde Inside Airbnb y cargar con `COPY INTO` usando un stage interno de Snowflake.
-
-### 3. Configurar dbt Cloud
-
-- Conectar a la cuenta de Snowflake
-- Conectar al repositorio GitHub
-- Configurar variables de entorno DEV y PROD
-- Ejecutar `dbt deps` para instalar `dbt_utils`
-
-### 4. Ejecutar el pipeline
+### 5. Ejecutar el pipeline dbt
 
 ```bash
-dbt seed          # carga dim_room_type
-dbt run           # ejecuta todos los modelos
-dbt snapshot      # actualiza dim_host_snapshot
-dbt test          # verifica calidad de datos
+dbt deps
+dbt seed
+dbt run
+dbt snapshot
+dbt test
 ```
 
 ---
 
-## Documentación
+## Limitaciones conocidas
 
-En docs está la siguiente documentación:
-
-- ERD Silver
-- ERD Gold
-- Linaje
-- Presentación
-
+- Precios en USD — Inside Airbnb no convierte a EUR
+- Málaga tiene baja granularidad geográfica: 65,8% de listings bajo el barrio 'Centro'
+- `estimated_revenue_adjusted` es una estimación, no el ingreso real del propietario
+- Los snapshots de Inside Airbnb son trimestrales, no datos en tiempo real
