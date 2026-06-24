@@ -230,10 +230,16 @@ dbt test
 ```
 
 ---
-
 ## Limitaciones conocidas
-
 - Precios en USD — Inside Airbnb no convierte a EUR
 - Málaga tiene baja granularidad geográfica: 65,8% de listings bajo el barrio 'Centro'
 - `estimated_revenue_adjusted` es una estimación, no el ingreso real del propietario
 - Los snapshots de Inside Airbnb son trimestrales, no datos en tiempo real
+
+## Dashboard PowerBI (versión bootcamp)
+### Página 1 — ¿Cuánta vivienda está siendo capturada?
+![Vivienda capturada](docs/BI_vivienda_capturada.png)
+### Página 2 — ¿Quién captura la vivienda?
+![Quién captura](docs/BI_quien_captura.png)
+### Página 3 — ¿Cuál es la rentabilidad?
+![Rentabilidad](docs/BI_rentabilidad.png)
