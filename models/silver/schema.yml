@@ -22,19 +22,21 @@ models:
               arguments:
                 values: ['Entire home/apt', 'Private room', 'Hotel room', 'Shared room']
       - name: city
+        description: "Ciudad del listing: una de las 9 ciudades españolas"
         tests:
           - not_null
           - accepted_values:
-              values:
-                - sevilla
-                - malaga
-                - barcelona
-                - girona
-                - euskadi
-                - valencia
-                - madrid
-                - mallorca
-                - menorca
+              arguments:
+                values:
+                  - sevilla
+                  - malaga
+                  - barcelona
+                  - girona
+                  - euskadi
+                  - valencia
+                  - madrid
+                  - mallorca
+                  - menorca
 
   - name: stg_listings__host
     description: >
