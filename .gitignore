@@ -10,8 +10,8 @@ dbt_internal_packages/
 # credenciales — NUNCA a GitHub
 .env
 
-# datos crudos descargados (archivos grandes)
-data/
+# datos crudos descargados (archivos grandes, no commitear)
+data/raw/
 
 # Python
 __pycache__/
