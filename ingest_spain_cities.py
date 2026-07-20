@@ -18,6 +18,7 @@ CREDENCIALES — archivo .env en la raíz del proyecto:
 import os
 import sys
 import urllib.request
+import urllib.parse
 from pathlib import Path
 
 import gzip
@@ -78,32 +79,40 @@ RAW_LISTINGS_COLUMNS = [
 
 CITIES = {
     "barcelona": {
-        "date": "2026-03-21",
+        "date": "2026-06-24",
         "path": "spain/catalonia/barcelona",
     },
     "girona": {
-        "date": "2025-12-31",
+        "date": "2026-06-30",
         "path": "spain/catalonia/girona",
     },
     "euskadi": {
-        "date": "2025-09-29",
+        "date": "2026-06-30",
         "path": "spain/pv/euskadi",
     },
     "valencia": {
-        "date": "2025-09-23",
+        "date": "2026-06-26",
         "path": "spain/vc/valencia",
     },
     "madrid": {
-        "date": "2025-09-14",
+        "date": "2026-06-20",
         "path": "spain/comunidad-de-madrid/madrid",
     },
     "mallorca": {
-        "date": "2025-09-21",
+        "date": "2026-06-23",
         "path": "spain/islas-baleares/mallorca",
     },
     "menorca": {
-        "date": "2025-09-30",
+        "date": "2026-06-30",
         "path": "spain/islas-baleares/menorca",
+    },
+    "malaga": {
+        "date": "2026-06-30",
+        "path": "spain/andalucía/malaga",
+    },
+    "sevilla": {
+        "date": "2026-06-30",
+        "path": "spain/andalucía/sevilla",
     },
 }
 
@@ -138,6 +147,8 @@ def download_file(url: str, dest: Path) -> bool:
         print(f"  ⏭  Ya existe ({size_mb:.1f} MB): {dest.name}")
         return True
     dest.parent.mkdir(parents=True, exist_ok=True)
+    # Codificar caracteres especiales en la URL (ej. 'andalucía')
+    url = urllib.parse.quote(url, safe=":/")
     try:
         req = urllib.request.Request(url, headers=HEADERS)
         with urllib.request.urlopen(req, timeout=180) as r:

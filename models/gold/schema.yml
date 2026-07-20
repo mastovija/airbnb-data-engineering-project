@@ -20,7 +20,7 @@ models:
         tests:
           - not_null
       - name: city
-        description: "Ciudad: sevilla o malaga"
+        description: "Ciudad: una de las 9 ciudades españolas del proyecto"
         tests:
           - not_null
 
@@ -147,12 +147,12 @@ models:
 
   - name: mart_city_comparison
     description: >
-      Una fila por ciudad con las métricas clave de Sevilla y Málaga.
-      Responde al caso de uso 3.3 — comparativa directa entre ciudades.
-      Diseñada para las tarjetas KPI de PowerBI.
+      Una fila por ciudad con las métricas clave de las 9 ciudades
+      españolas analizadas. Responde al caso de uso 3.3 — comparativa
+      directa entre ciudades. Diseñada para las tarjetas KPI del dashboard.
     columns:
       - name: city
-        description: "PK — sevilla o malaga"
+        description: "PK — una de las 9 ciudades españolas del proyecto"
         tests:
           - unique
           - not_null
