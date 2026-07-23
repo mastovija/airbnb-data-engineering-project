@@ -13,11 +13,24 @@
 --   20% pct_multihost      → concentración del mercado
 -- Permite ordenar los barrios de mayor a menor presión
 -- en una sola métrica para el dashboard.
+--
+-- POR QUÉ UNA VENTANA DE 30 DÍAS Y NO snapshot_date = MAX(...):
+-- Inside Airbnb no scrapea una ciudad en un único día. El campo
+-- last_scraped (= snapshot_date) se reparte a lo largo de varios
+-- días dentro del mismo snapshot trimestral: Madrid, por ejemplo,
+-- tiene 5 fechas distintas entre 2026-06-20 y 2026-07-02.
+-- Filtrar por el MAX exacto se quedaba solo con los listings
+-- scrapeados el último día — una muestra sesgada de ~8% que dejaba
+-- este mart con 538 barrios de los 875 de dim_neighbourhood.
+-- La ventana de 30 días recoge el snapshot trimestral completo
+-- y sigue excluyendo los snapshots anteriores, que están a ~90
+-- días de distancia. Como cada listing se scrapea una sola vez
+-- por snapshot, la ventana no duplica filas.
 -- =============================================================
 
 WITH fact AS (
     SELECT * FROM {{ ref('fact_listings') }}
-    QUALIFY snapshot_date = MAX(snapshot_date) OVER (PARTITION BY city)
+    QUALIFY snapshot_date >= DATEADD('day', -30, MAX(snapshot_date) OVER (PARTITION BY city))
 )
 
 SELECT
