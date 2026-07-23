@@ -24,13 +24,22 @@
 -- este mart con 538 barrios de los 875 de dim_neighbourhood.
 -- La ventana de 30 días recoge el snapshot trimestral completo
 -- y sigue excluyendo los snapshots anteriores, que están a ~90
--- días de distancia. Como cada listing se scrapea una sola vez
--- por snapshot, la ventana no duplica filas.
+-- días de distancia.
+--
+-- El ROW_NUMBER es defensivo: hoy cada listing se scrapea una sola
+-- vez por snapshot, así que no elimina ninguna fila. Está para que
+-- dos publicaciones de Inside Airbnb separadas por menos de 30 días
+-- no metan el mismo listing dos veces en la ventana e inflen los
+-- conteos en silencio.
 -- =============================================================
 
 WITH fact AS (
     SELECT * FROM {{ ref('fact_listings') }}
     QUALIFY snapshot_date >= DATEADD('day', -30, MAX(snapshot_date) OVER (PARTITION BY city))
+        AND ROW_NUMBER() OVER (
+                PARTITION BY city, listing_id
+                ORDER BY snapshot_date DESC
+            ) = 1
 )
 
 SELECT
