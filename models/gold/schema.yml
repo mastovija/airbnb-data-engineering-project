@@ -83,6 +83,24 @@ models:
                 combination_of_columns:
                   - listing_id
                   - snapshot_date
+      - name: neighbourhood_id
+        description: >
+          FK a dim_neighbourhood. Puede ser NULL si el barrio del listing no
+          casó en el join (el test relationships ignora los NULL por diseño).
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_neighbourhood')
+                field: neighbourhood_id
+      - name: host_sk
+        description: >
+          FK a dim_host. Puede ser NULL si el host del listing no casó en el
+          join (el test relationships ignora los NULL por diseño).
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_host')
+                field: host_sk
       - name: is_active_listing
         description: >
           TRUE si el listing tiene precio, disponibilidad > 0 y

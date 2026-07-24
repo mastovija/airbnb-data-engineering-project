@@ -12,6 +12,13 @@ models:
         description: "PK — identificador único del listing"
         tests:
           - not_null
+          # listing_id único a nivel global (no por ciudad): detecta el mismo
+          # listing en dos ciudades solapadas (Girona/Barcelona, Mallorca/Menorca)
+          # o una doble carga accidental del CSV en Bronze.
+          - dbt_utils.unique_combination_of_columns:
+              arguments:
+                combination_of_columns:
+                  - listing_id
       - name: room_type
         description: "Tipo de habitación: Entire home, Private room, Hotel room o Shared room"
         tests:
@@ -54,6 +61,11 @@ models:
         description: "FK hacia stg_listings__details"
         tests:
           - not_null
+          # Una fila por listing también en la tabla de host (no por host).
+          - dbt_utils.unique_combination_of_columns:
+              arguments:
+                combination_of_columns:
+                  - listing_id
       - name: host_profile
         description: "Clasificación: Host individual (1 VTC) / Multipropiedad (2-4) / Operador profesional (5+)"
         tests:
@@ -72,6 +84,10 @@ models:
         description: "PK — una fila por listing"
         tests:
           - not_null
+          - dbt_utils.unique_combination_of_columns:
+              arguments:
+                combination_of_columns:
+                  - listing_id
       - name: neighbourhood_cleansed
         description: "Barrio normalizado por Inside Airbnb — referencia geográfica principal"
         tests:
@@ -89,6 +105,10 @@ models:
         description: "PK — una fila por listing"
         tests:
           - not_null
+          - dbt_utils.unique_combination_of_columns:
+              arguments:
+                combination_of_columns:
+                  - listing_id
       - name: availability_profile
         description: "Categoría de disponibilidad anual: Casi sin disponibilidad / Uso parcial / Alta disponibilidad"
         tests:
@@ -107,6 +127,10 @@ models:
         description: "PK — una fila por listing"
         tests:
           - not_null
+          - dbt_utils.unique_combination_of_columns:
+              arguments:
+                combination_of_columns:
+                  - listing_id
 
   - name: stg_reviews
     description: >
