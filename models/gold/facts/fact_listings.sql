@@ -4,9 +4,18 @@
 -- con todas las métricas numéricas y las 4 FKs a dimensiones.
 --
 -- Materialización incremental: en cargas sucesivas solo se
--- insertan los listings cuyo snapshot_date sea posterior al
--- máximo ya cargado. Esto permite añadir nuevos snapshots de
+-- insertan las combinaciones (city, snapshot_date) que aún no
+-- están en la tabla. Esto permite añadir nuevos snapshots de
 -- Inside Airbnb sin recargar el histórico completo.
+--
+-- POR QUÉ LA COMPROBACIÓN ES POR CIUDAD Y NO UN MAX GLOBAL:
+-- Inside Airbnb scrapea cada ciudad en fechas distintas. Un
+-- MAX(snapshot_date) global descartaría en silencio una ciudad
+-- publicada con fecha anterior al máximo de otra ciudad ya
+-- cargada (p.ej. Euskadi scrapeado el 2026-06-28 no superaría
+-- el 2026-07-02 de Madrid y se perdería entero). El NOT EXISTS
+-- sobre (city, snapshot_date) trae cualquier snapshot que aún no
+-- tengamos sin depender de que las fechas vengan ordenadas.
 --
 -- Columnas desnormalizadas (degenerate dimensions):
 -- is_entire_home, host_profile y city se repiten desde las dims
@@ -120,8 +129,8 @@ joined AS (
         a.city,
 
         -- Clave de la materialización incremental:
-        -- en la siguiente carga solo se insertan filas con
-        -- snapshot_date posterior al máximo ya presente en la tabla
+        -- en la siguiente carga solo se insertan las combinaciones
+        -- (city, snapshot_date) que aún no están en la tabla
         a.last_scraped                  AS snapshot_date
 
     FROM availability a
@@ -155,7 +164,15 @@ joined AS (
 SELECT * FROM joined
 
 -- Bloque incremental: en la primera ejecución se carga todo.
--- En ejecuciones posteriores solo se insertan las filas nuevas.
+-- En ejecuciones posteriores solo se insertan las combinaciones
+-- (city, snapshot_date) que aún no existen en la tabla — comprobación
+-- por ciudad para no descartar snapshots con fecha anterior al máximo
+-- global (ver cabecera del modelo).
 {% if is_incremental() %}
-WHERE snapshot_date > (SELECT MAX(snapshot_date) FROM {{ this }})
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM {{ this }} t
+    WHERE t.city = joined.city
+      AND t.snapshot_date = joined.snapshot_date
+)
 {% endif %}
