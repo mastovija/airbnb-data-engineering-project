@@ -19,7 +19,7 @@
 --
 -- Columnas desnormalizadas (degenerate dimensions):
 -- is_entire_home, host_profile y city se repiten desde las dims
--- para evitar joins frecuentes en PowerBI y en los marts.
+-- para evitar joins frecuentes en Streamlit y en los marts.
 -- Es una decisión de rendimiento deliberada y justificada.
 --
 -- is_active_listing se calcula aquí (no en Silver) porque
@@ -88,7 +88,7 @@ joined AS (
         n.neighbourhood_id,
         rt.room_type_id,
 
-        -- Métricas económicas (precio winsorizaddo al P99 por ciudad)
+        -- Métricas económicas (precio winsorizado al P95 por ciudad)
         a.price_winsorized,
         a.price_per_person,         -- precio / accommodates
 
@@ -123,7 +123,7 @@ joined AS (
             ELSE FALSE
         END                             AS is_active_listing,
 
-        -- Degenerate dimensions: desnormalizadas para rendimiento en PowerBI
+        -- Degenerate dimensions: desnormalizadas para rendimiento en Streamlit
         d.is_entire_home,               -- evita join a dim_listing en cada consulta
         h.host_profile,                 -- evita join a dim_host en cada consulta
         a.city,

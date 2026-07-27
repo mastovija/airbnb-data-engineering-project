@@ -5,7 +5,7 @@
 -- es el barrio normalizado por Inside Airbnb, sin nulos
 -- en ninguna ciudad. Es la referencia geográfica principal
 -- del proyecto. Alimenta dim_neighbourhood en Gold y los
--- mapas de PowerBI.
+-- mapas de Streamlit.
 -- =============================================================
 
 WITH source AS (
@@ -19,7 +19,7 @@ SELECT
     -- causar duplicados en dim_neighbourhood (ej: 'Triana ' != 'Triana')
     TRIM(neighbourhood_cleansed)     AS neighbourhood_cleansed,
 
-    -- Coordenadas necesarias para los mapas de PowerBI.
+    -- Coordenadas necesarias para los mapas de Streamlit.
     -- Permiten visualizar la densidad de Airbnb a nivel de calle.
     TRY_CAST(latitude AS FLOAT)      AS latitude,
     TRY_CAST(longitude AS FLOAT)     AS longitude,

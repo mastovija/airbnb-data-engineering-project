@@ -2,7 +2,7 @@
 -- mart_neighbourhood_pressure
 -- La tabla más importante del proyecto. Una fila por barrio
 -- con todos los KPIs de presión sobre el mercado de vivienda.
--- Es lo que alimenta el mapa de calor principal de PowerBI.
+-- Es lo que alimenta el mapa de calor principal de Streamlit.
 -- Responde a los casos de uso 1.1, 1.2, 2.1, 2.2, 3.1 y 3.2.
 --
 -- pressure_score: índice sintético que combina los tres

@@ -4,7 +4,7 @@
 -- Combina datos de dos tablas Silver (details + location) y
 -- añade las FKs hacia dim_neighbourhood y dim_room_type para
 -- construir el esquema estrella.
--- latitude y longitude son necesarias para los mapas de PowerBI.
+-- latitude y longitude son necesarias para los mapas de Streamlit.
 -- =============================================================
 
 WITH details AS (
@@ -40,7 +40,7 @@ SELECT
     d.is_entire_home,   -- KPI central: vivienda completa capturada por Airbnb
     d.accommodates,     -- Necesario para interpretar price_per_person en fact
 
-    -- Geografía: neighbourhood_cleansed como texto para filtros en PowerBI,
+    -- Geografía: neighbourhood_cleansed como texto para filtros en Streamlit,
     -- neighbourhood_id como FK para joins eficientes en el esquema estrella
     l.neighbourhood_cleansed,
     l.latitude,

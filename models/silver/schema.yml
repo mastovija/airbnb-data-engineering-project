@@ -97,7 +97,7 @@ models:
     description: >
       Precio, disponibilidad y ocupación del listing.
       Tabla analíticamente más importante de Silver.
-      Implementa winsorización del precio al P99 por ciudad
+      Implementa winsorización del precio al P95 por ciudad
       para neutralizar outliers sin eliminar filas.
       price_per_person normaliza listings de distinta capacidad.
     columns:

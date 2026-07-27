@@ -2,7 +2,7 @@
 
 Pipeline de data engineering que monitoriza el impacto de Airbnb sobre el mercado
 de vivienda en las **9 ciudades españolas** disponibles en Inside Airbnb, con
-actualización trimestral automática y dashboard público.
+actualización trimestral documentada y dashboard público.
 
 ---
 
@@ -22,7 +22,7 @@ actualización trimestral automática y dashboard público.
 | **Python** | Ingesta automatizada — descarga y carga en Snowflake |
 | **Snowflake** | Data warehouse — Bronze, Silver y Gold |
 | **dbt Cloud** | Transformaciones SQL, tests y documentación |
-| **Streamlit** | Dashboard público interactivo *(en desarrollo)* |
+| **Streamlit** | Dashboard público interactivo |
 | **GitHub** | Control de versiones — ramas dev y main |
 
 ---
@@ -89,7 +89,12 @@ Inside Airbnb (CSV.gz)
 ```
 spain-airbnb-housing-pressure/
 ├── ingest_spain_cities.py       ← descarga + carga en Snowflake
+├── export_gold.py               ← Gold (Snowflake) → Parquet local
+├── streamlit_app.py             ← dashboard público
 ├── requirements.txt
+├── LICENSE                      ← MIT (código) · datos CC BY 4.0
+├── data/
+│   └── gold/                    ← Parquet que consume el dashboard
 ├── models/
 │   ├── silver/
 │   │   ├── sources.yml
@@ -117,8 +122,13 @@ spain-airbnb-housing-pressure/
 │   └── dim_room_type.csv
 ├── snapshots/
 │   └── dim_host_snapshot.sql            ← SCD Tipo 2
-└── macros/
-    └── generate_schema_name.sql
+├── tests/
+│   └── assert_marts_listings_consistency.sql   ← coherencia marts vs fact
+├── macros/
+│   └── generate_schema_name.sql
+└── docs/
+    └── legacy/
+        └── airbnb_andalucia_BI.pbix     ← dashboard PowerBI (versión bootcamp)
 ```
 
 ---
@@ -229,14 +239,68 @@ dbt snapshot
 dbt test
 ```
 
+### 6. Exportar Gold a Parquet y lanzar el dashboard
+
+```bash
+python3 export_gold.py
+streamlit run streamlit_app.py
+```
+
+`export_gold.py` vuelca las tablas de Gold a `data/gold/*.parquet`, que es lo
+que lee el dashboard (sin necesidad de que Snowflake esté activo). Por defecto
+exporta desde `AIRBNB_PROD_GOLD`; para exportar desde DEV:
+
+```bash
+DBT_DATABASE_GOLD=AIRBNB_DEV_GOLD python3 export_gold.py
+```
+
+### Actualización trimestral
+
+Cuando Inside Airbnb publica un nuevo snapshot, el ciclo completo es:
+`ingest_spain_cities.py` → `dbt run` + `dbt test` → `export_gold.py` → commit de
+`data/gold/`. No hay orquestador: el proceso está documentado, pero se lanza
+manualmente.
+
 ---
 ## Limitaciones conocidas
 - Precios en USD — Inside Airbnb no convierte a EUR
 - Málaga tiene baja granularidad geográfica: 65,8% de listings bajo el barrio 'Centro'
 - `estimated_revenue_adjusted` es una estimación, no el ingreso real del propietario
 - Los snapshots de Inside Airbnb son trimestrales, no datos en tiempo real
+- Inside Airbnb scrapea cada ciudad a lo largo de varios días: `last_scraped`
+  tiene varias fechas dentro del mismo snapshot (Madrid: 5 fechas entre el
+  2026-06-20 y el 2026-07-02). Por eso los marts filtran por una ventana de
+  30 días y no por el máximo exacto
+
+---
+
+## Fuente de datos y atribución
+
+Los datos proceden de **[Inside Airbnb](https://insideairbnb.com)**, un proyecto
+independiente que publica datos de listings de Airbnb con fines de investigación
+sobre el impacto de los alquileres turísticos en las ciudades.
+
+Los datos de Inside Airbnb se distribuyen bajo licencia
+**[Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)**,
+que permite compartir y adaptar el material siempre que se dé la atribución
+correspondiente. Este proyecto no está afiliado ni respaldado por Inside Airbnb
+ni por Airbnb, Inc.
+
+## Licencia
+
+El **código** de este repositorio (ingesta, modelos dbt y dashboard) se publica
+bajo licencia **[MIT](LICENSE)**.
+
+Los **datos** de `data/` conservan la licencia original de Inside Airbnb
+(CC BY 4.0) y no están cubiertos por la licencia MIT.
+
+---
 
 ## Dashboard PowerBI (versión bootcamp)
+
+Primera versión del proyecto, anterior al dashboard de Streamlit. El fichero
+`.pbix` se conserva en [`docs/legacy/`](docs/legacy/) como referencia histórica.
+
 ### Página 1 — ¿Cuánta vivienda está siendo capturada?
 ![Vivienda capturada](docs/BI_vivienda_capturada.png)
 ### Página 2 — ¿Quién captura la vivienda?

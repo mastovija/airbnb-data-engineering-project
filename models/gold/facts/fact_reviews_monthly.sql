@@ -19,7 +19,7 @@ SELECT
     review_year,
     review_month,
 
-    -- Primer día del mes: eje temporal en PowerBI.
+    -- Primer día del mes: eje temporal en Streamlit.
     -- Permite ordenar cronológicamente sin ambigüedad.
     review_month_start,
 

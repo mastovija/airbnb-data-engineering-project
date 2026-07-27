@@ -14,13 +14,21 @@ sources:
     tables:
       - name: raw_listings
         description: >
-          Dato crudo de listings de Inside Airbnb para Sevilla y Málaga.
-          Snapshot de diciembre 2024. 17.929 filas, 80 columnas (79 originales
-          + columna city añadida en la carga). Todo en tipo TEXT — ninguna
-          transformación aplicada en Bronze.
+          Dato crudo de listings de Inside Airbnb para las 9 ciudades españolas
+          del proyecto (Madrid, Málaga, Girona, Sevilla, Barcelona, Mallorca,
+          Valencia, Euskadi y Menorca). Snapshot de junio 2026. ~126K filas
+          (109.607 listings únicos), 80 columnas (79 originales + columna city
+          añadida en la carga). Todo en tipo TEXT — ninguna transformación
+          aplicada en Bronze.
+
+          Cada ciudad se scrapea a lo largo de varios días dentro del mismo
+          snapshot trimestral, así que last_scraped tiene varias fechas por
+          ciudad (Madrid: 5 fechas entre 2026-06-20 y 2026-07-02). Los marts
+          de Gold filtran por una ventana de 30 días, no por el máximo exacto.
 
       - name: raw_reviews
         description: >
-          Dato crudo de reseñas de Inside Airbnb para Sevilla y Málaga.
-          ~1.1M filas. Incluye fecha, reviewer_id y texto del comentario.
-          El texto se descarta en Silver por volumen y falta de valor analítico.
+          Dato crudo de reseñas de Inside Airbnb para las 9 ciudades españolas
+          del proyecto. Snapshot de junio 2026. ~5.3M filas. Incluye fecha,
+          reviewer_id y texto del comentario. El texto se descarta en Silver
+          por volumen y falta de valor analítico.
