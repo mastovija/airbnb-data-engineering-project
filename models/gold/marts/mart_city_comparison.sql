@@ -1,18 +1,40 @@
 -- =============================================================
 -- mart_city_comparison
--- Una fila por ciudad. Comparativa directa Sevilla vs Málaga.
+-- Una fila por ciudad. Comparativa directa entre las 9 ciudades.
 -- Responde al caso de uso 3.3.
--- Diseñada para las tarjetas KPI de PowerBI: cada fila es una
+-- Diseñada para las tarjetas KPI del dashboard: cada fila es una
 -- ciudad y cada columna es una métrica comparable directamente.
 --
 -- El join a dim_host permite calcular métricas a nivel de host
 -- (total_hosts, pct_professional_operators) que no están
 -- disponibles directamente en fact_listings.
+--
+-- POR QUÉ UNA VENTANA DE 30 DÍAS Y NO snapshot_date = MAX(...):
+-- Inside Airbnb no scrapea una ciudad en un único día. El campo
+-- last_scraped (= snapshot_date) se reparte a lo largo de varios
+-- días dentro del mismo snapshot trimestral: Madrid, por ejemplo,
+-- tiene 5 fechas distintas entre 2026-06-20 y 2026-07-02.
+-- Filtrar por el MAX exacto se quedaba solo con los listings
+-- scrapeados el último día — una muestra sesgada de ~8% (Madrid
+-- aparecía con 2.966 listings en lugar de ~25.000).
+-- La ventana de 30 días recoge el snapshot trimestral completo
+-- y sigue excluyendo los snapshots anteriores, que están a ~90
+-- días de distancia.
+--
+-- El ROW_NUMBER es defensivo: hoy cada listing se scrapea una sola
+-- vez por snapshot, así que no elimina ninguna fila. Está para que
+-- dos publicaciones de Inside Airbnb separadas por menos de 30 días
+-- no metan el mismo listing dos veces en la ventana e inflen los
+-- conteos en silencio.
 -- =============================================================
 
 WITH fact AS (
     SELECT * FROM {{ ref('fact_listings') }}
-    QUALIFY snapshot_date = MAX(snapshot_date) OVER (PARTITION BY city)
+    QUALIFY snapshot_date >= DATEADD('day', -30, MAX(snapshot_date) OVER (PARTITION BY city))
+        AND ROW_NUMBER() OVER (
+                PARTITION BY city, listing_id
+                ORDER BY snapshot_date DESC
+            ) = 1
 ),
 
 hosts AS (

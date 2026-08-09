@@ -29,7 +29,7 @@ SELECT
     YEAR(TRY_TO_DATE(date, 'YYYY-MM-DD'))           AS review_year,
     MONTH(TRY_TO_DATE(date, 'YYYY-MM-DD'))          AS review_month,
 
-    -- Primer día del mes: usado como eje temporal en PowerBI.
+    -- Primer día del mes: usado como eje temporal en Streamlit.
     -- DATE_TRUNC garantiza que todas las reviews de un mes
     -- tienen exactamente el mismo valor para agrupar correctamente.
     DATE_TRUNC('month', TRY_TO_DATE(date, 'YYYY-MM-DD')) AS review_month_start,

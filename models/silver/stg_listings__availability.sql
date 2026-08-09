@@ -3,7 +3,7 @@
 -- Precio, disponibilidad y ocupación de cada listing.
 -- Es la tabla más importante de Silver: contiene los datos
 -- económicos que alimentan todos los KPIs del proyecto.
--- Transformación clave: winsorización del precio al P99 por
+-- Transformación clave: winsorización del precio al P95 por
 -- ciudad para neutralizar outliers sin eliminar filas.
 -- =============================================================
 
@@ -24,11 +24,12 @@ price_cleaned AS (
     FROM source
 ),
 
--- Calcula el percentil 99 de precio por ciudad.
+-- Calcula el percentil 95 de precio por ciudad.
 -- Se usa para la winsorización: los listings por encima de este
 -- valor tienen precios erróneos o atípicos extremos (ej: 92.150€
 -- detectado en Málaga). Calcular por ciudad evita que los precios
--- de Sevilla distorsionen el P99 de Málaga y viceversa.
+-- de una ciudad distorsionen el P95 de otra: el nivel de precios
+-- de Madrid o Mallorca no es comparable al de Menorca o Euskadi.
 percentiles AS (
     SELECT
         city,
@@ -46,7 +47,7 @@ final AS (
         pc.price                                                AS price_raw,
         pc.price_numeric,
 
-        -- Winsorización: si el precio supera el P99, se capea al P99.
+        -- Winsorización: si el precio supera el P95, se capea al P95.
         -- El listing NO se elimina — solo se neutraliza el outlier en
         -- el campo de precio. Esto permite análisis de concentración
         -- geográfica con todos los listings.
@@ -84,7 +85,7 @@ final AS (
 
         -- Categorización legible de la disponibilidad anual.
         -- Convierte el número crudo en una etiqueta interpretable
-        -- para PowerBI y para el análisis del Bloque 1.
+        -- para Streamlit y para el análisis del Bloque 1.
         CASE
             WHEN TRY_CAST(pc.availability_365 AS INTEGER) < 60
                 THEN 'Casi sin disponibilidad'
@@ -103,7 +104,7 @@ final AS (
             REPLACE(REPLACE(pc.estimated_revenue_l365d, '$', ''), ',', '')
             AS FLOAT)                                           AS estimated_revenue_l365d,
 
-        -- Revenue ajustado: precio winsorizaddo × ocupación estimada
+        -- Revenue ajustado: precio winsorizado × ocupación estimada
         -- Más fiable que estimated_revenue_l365d de Inside Airbnb
         -- que usa el precio original sin limpiar
         LEAST(pc.price_numeric, p.p95_price)

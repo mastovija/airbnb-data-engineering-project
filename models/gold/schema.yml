@@ -29,7 +29,7 @@ models:
       Una fila por listing con información descriptiva del inmueble.
       Combina stg_listings__details y stg_listings__location.
       Contiene las FKs a dim_neighbourhood y dim_room_type.
-      latitude y longitude son necesarias para los mapas de PowerBI.
+      latitude y longitude son necesarias para los mapas de Streamlit.
     columns:
       - name: listing_id
         description: "PK — identificador único del listing"
@@ -73,7 +73,7 @@ models:
       posterior al máximo ya cargado. is_active_listing se calcula aquí
       porque combina columnas de dos tablas Silver distintas.
       is_entire_home, host_profile y city están desnormalizadas
-      (degenerate dimensions) para rendimiento en PowerBI.
+      (degenerate dimensions) para rendimiento en Streamlit.
     columns:
       - name: listing_id
         description: "PK — identificador único del listing"
@@ -83,6 +83,24 @@ models:
                 combination_of_columns:
                   - listing_id
                   - snapshot_date
+      - name: neighbourhood_id
+        description: >
+          FK a dim_neighbourhood. Puede ser NULL si el barrio del listing no
+          casó en el join (el test relationships ignora los NULL por diseño).
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_neighbourhood')
+                field: neighbourhood_id
+      - name: host_sk
+        description: >
+          FK a dim_host. Puede ser NULL si el host del listing no casó en el
+          join (el test relationships ignora los NULL por diseño).
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_host')
+                field: host_sk
       - name: is_active_listing
         description: >
           TRUE si el listing tiene precio, disponibilidad > 0 y
@@ -116,7 +134,7 @@ models:
     description: >
       La tabla más importante del proyecto. Una fila por barrio
       con todos los KPIs de presión sobre el mercado de vivienda.
-      Alimenta el mapa de calor principal de PowerBI.
+      Alimenta el mapa de calor principal de Streamlit.
       pressure_score es un índice sintético (50% pct_entire_home +
       30% pct_high_availability + 20% pct_multihost) para ranking.
     columns:

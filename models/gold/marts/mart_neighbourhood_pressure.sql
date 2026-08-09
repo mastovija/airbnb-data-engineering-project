@@ -2,7 +2,7 @@
 -- mart_neighbourhood_pressure
 -- La tabla más importante del proyecto. Una fila por barrio
 -- con todos los KPIs de presión sobre el mercado de vivienda.
--- Es lo que alimenta el mapa de calor principal de PowerBI.
+-- Es lo que alimenta el mapa de calor principal de Streamlit.
 -- Responde a los casos de uso 1.1, 1.2, 2.1, 2.2, 3.1 y 3.2.
 --
 -- pressure_score: índice sintético que combina los tres
@@ -13,11 +13,33 @@
 --   20% pct_multihost      → concentración del mercado
 -- Permite ordenar los barrios de mayor a menor presión
 -- en una sola métrica para el dashboard.
+--
+-- POR QUÉ UNA VENTANA DE 30 DÍAS Y NO snapshot_date = MAX(...):
+-- Inside Airbnb no scrapea una ciudad en un único día. El campo
+-- last_scraped (= snapshot_date) se reparte a lo largo de varios
+-- días dentro del mismo snapshot trimestral: Madrid, por ejemplo,
+-- tiene 5 fechas distintas entre 2026-06-20 y 2026-07-02.
+-- Filtrar por el MAX exacto se quedaba solo con los listings
+-- scrapeados el último día — una muestra sesgada de ~8% que dejaba
+-- este mart con 538 barrios de los 875 de dim_neighbourhood.
+-- La ventana de 30 días recoge el snapshot trimestral completo
+-- y sigue excluyendo los snapshots anteriores, que están a ~90
+-- días de distancia.
+--
+-- El ROW_NUMBER es defensivo: hoy cada listing se scrapea una sola
+-- vez por snapshot, así que no elimina ninguna fila. Está para que
+-- dos publicaciones de Inside Airbnb separadas por menos de 30 días
+-- no metan el mismo listing dos veces en la ventana e inflen los
+-- conteos en silencio.
 -- =============================================================
 
 WITH fact AS (
     SELECT * FROM {{ ref('fact_listings') }}
-    QUALIFY snapshot_date = MAX(snapshot_date) OVER (PARTITION BY city)
+    QUALIFY snapshot_date >= DATEADD('day', -30, MAX(snapshot_date) OVER (PARTITION BY city))
+        AND ROW_NUMBER() OVER (
+                PARTITION BY city, listing_id
+                ORDER BY snapshot_date DESC
+            ) = 1
 )
 
 SELECT

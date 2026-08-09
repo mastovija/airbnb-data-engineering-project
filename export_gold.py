@@ -31,8 +31,13 @@ SNOWFLAKE_ACCOUNT   = os.getenv("SNOWFLAKE_ACCOUNT",  "TU_ACCOUNT_AQUI")
 SNOWFLAKE_USER      = os.getenv("SNOWFLAKE_USER",     "TU_USUARIO_AQUI")
 SNOWFLAKE_PASSWORD  = os.getenv("SNOWFLAKE_PASSWORD", "TU_PASSWORD_AQUI")
 SNOWFLAKE_WAREHOUSE = "AIRBNB_WH"
-SNOWFLAKE_DATABASE  = "AIRBNB_PROD_GOLD"
 SNOWFLAKE_SCHEMA    = "GOLD"
+
+# Database de origen. Por defecto PROD, que es lo habitual para publicar el
+# dashboard. Para exportar desde DEV (p.ej. validar un cambio antes de
+# promocionarlo a main) basta con:
+#     DBT_DATABASE_GOLD=AIRBNB_DEV_GOLD python3 export_gold.py
+SNOWFLAKE_DATABASE  = os.getenv("DBT_DATABASE_GOLD", "AIRBNB_PROD_GOLD")
 
 OUTPUT_DIR = Path("data/gold")
 
